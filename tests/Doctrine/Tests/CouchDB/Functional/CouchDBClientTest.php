@@ -284,10 +284,10 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
     public function testAttachments()
     {
         $docId = "foo-bar-baz-the-second";
-        $attachmentName = "a-file.txt";
+        $attachmentName = "test-attachment.html";
 
-        $content = "A plain text attachment";
-        $type = "text/plain";
+        $content = "<html><body><h1>Test</h1><p>Attachment</p></body></html>";
+        $type = "text/html";
 
         $client = $this->couchClient;
         list($id, $rev) = $client->putDocument(array("foo" => "bar"), $docId);
@@ -306,7 +306,9 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
         $response = $client->findDocument($id);
         $attachments = $response->body['_attachments'];
         $this->assertTrue(is_array($attachments));
-        $responseAttachment = $client->constructAttachment(current($attachments), $docId, $attachmentName);
+        $first = current($attachments);
+        $this->assertTrue(is_array($first));
+        $responseAttachment = $client->constructAttachment($first, $docId, $attachmentName);
         $this->assertEquals($content, $responseAttachment->getRawData());
         $this->assertEquals($type, $responseAttachment->getContentType());
 

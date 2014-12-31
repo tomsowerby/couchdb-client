@@ -33,7 +33,8 @@ interface Client
      * @param string $path
      * @param string $data
      * @param bool $raw
+     * @param string $contentType
      * @return Response
      */
-    function request( $method, $path, $data = null, $raw = false );
+    function request( $method, $path, $data = null, $raw = false, $contentType = 'application/json' );
 }

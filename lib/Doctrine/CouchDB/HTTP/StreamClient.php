@@ -47,7 +47,7 @@ class StreamClient extends AbstractHTTPClient
      * @return Response
      * @throws HTTPException
      */
-    public function request( $method, $path, $data = null, $raw = false )
+    public function request( $method, $path, $data = null, $raw = false, $contentType = 'application/json' )
     {
         $basicAuth = '';
         if ( $this->options['username'] ) {
@@ -68,7 +68,7 @@ class StreamClient extends AbstractHTTPClient
                         'max_redirects' => 0,
                         'user_agent'    => 'Doctrine CouchDB ODM $Revision$',
                         'timeout'       => $this->options['timeout'],
-                        'header'        => 'Content-type: application/json',
+                        'header'        => 'Content-type: ' . $contentType,
                     ),
                 )
             )

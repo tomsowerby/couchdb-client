@@ -98,7 +98,7 @@ class SocketClient extends AbstractHTTPClient
      * @param string $data
      * @return string
      */
-    protected function buildRequest( $method, $path, $data )
+    protected function buildRequest( $method, $path, $data, $contentType = 'application/json' )
     {
         // Create basic request headers
         $request = "$method $path HTTP/1.1\r\nHost: {$this->options['host']}\r\n";
@@ -115,7 +115,7 @@ class SocketClient extends AbstractHTTPClient
         // initilization costs low, especially when the database server is not
         // available in the locale net.
         $request .= "Connection: " . ( $this->options['keep-alive'] ? 'Keep-Alive' : 'Close' ) . "\r\n";
-        $request .= "Content-type: application/json\r\n";
+        $request .= 'Content-type: ' . $contentType . "\r\n";
 
         // Also add headers and request body if data should be sent to the
         // server. Otherwise just add the closing mark for the header section
@@ -147,13 +147,13 @@ class SocketClient extends AbstractHTTPClient
      * @param bool $raw
      * @return Response
      */
-    public function request( $method, $path, $data = null, $raw = false )
+    public function request( $method, $path, $data = null, $raw = false, $contentType = 'application/json' )
     {
         // Try establishing the connection to the server
         $this->checkConnection();
 
         // Send the build request to the server
-        if ( fwrite( $this->connection, $request = $this->buildRequest( $method, $path, $data ) ) === false )
+        if ( fwrite( $this->connection, $request = $this->buildRequest( $method, $path, $data, $contentType ) ) === false )
         {
             // Reestablish which seems to have been aborted
             //
@@ -161,7 +161,7 @@ class SocketClient extends AbstractHTTPClient
             // connection establishing mechanism does not correctly throw an
             // exception on failure.
             $this->connection = null;
-            return $this->request( $method, $path, $data, $raw );
+            return $this->request( $method, $path, $data, $raw, $contentType );
         }
 
         // Read server response headers
@@ -187,7 +187,7 @@ class SocketClient extends AbstractHTTPClient
             // An aborted connection seems to happen here on long running
             // requests, which cause a connection timeout at server side.
             $this->connection = null;
-            return $this->request( $method, $path, $data, $raw );
+            return $this->request( $method, $path, $data, $raw, $contentType );
         }
 
         do {
