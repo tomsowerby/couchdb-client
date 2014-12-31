@@ -541,13 +541,18 @@ class CouchDBClient
     {
         $path = '/' . $this->databaseName . '/' . urlencode($docId) . '/' . urlencode($attName);
 
-        $attachmentResponse = $this->httpClient->request('GET', $path);
+        $attachmentResponse = $this->httpClient->request('GET', $path, null, true);
 
         if ($attachmentResponse->status != 200) {
             return null;
         }
 
-        return $this->constructAttachment($attachmentResponse->body, $docId, $attName);
+        $data = array(
+            'content_type' => $attachmentResponse->headers['content-type'],
+            'data' => $attachmentResponse->body
+        );
+
+        return $this->constructAttachment($data, $docId, $attName);
     }
 
     /**
@@ -565,10 +570,8 @@ class CouchDBClient
 
         if (array_key_exists('stub', $data) && $data['stub'] == true) {
             $attachment = Attachment::createStub($data['content_type'], $data['length'], $data['revpos'], $this->httpClient, $path);
-            // Standardisation for the odd way that lazyload maps things
-            $attachment = $this->constructAttachment(json_decode($attachment->getRawData(), true), $docId, $attName);
         } else {
-            $attachment = Attachment::createFromBase64Data($data['data'], $data['content_type']);
+            $attachment = Attachment::createFromBinaryData($data['data'], $data['content_type']);
         }
 
         return $attachment;
@@ -584,7 +587,7 @@ class CouchDBClient
      * @throws HTTPException
      * @return array<id, ok, rev>
      */
-    public function putAttachment(Attachment $data, $docId, $attName, $docRev = null)
+    public function putAttachment(Attachment $attachment, $docId, $attName, $docRev = null)
     {
         $path = '/' . $this->databaseName . '/' . urlencode($docId) . '/' . urlencode($attName);
 
@@ -592,13 +595,17 @@ class CouchDBClient
             $path .= '?rev=' . $docRev;
         }
 
-        $response = $this->httpClient->request('PUT', $path, json_encode($data->toArray()));
+        $response = $this->httpClient->request(
+            'PUT',
+            $path,
+            $attachment->getRawData(),
+            false,
+            $attachment->getContentType()
+        );
 
         if ($response->status != 201) {
             throw HTTPException::fromResponse($path, $response);
         }
-
-
 
         return array($response->body['id'], $response->body['ok'], $response->body['rev']);
     }

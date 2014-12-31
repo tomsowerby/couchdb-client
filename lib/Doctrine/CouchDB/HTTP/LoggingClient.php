@@ -58,11 +58,11 @@ class LoggingClient implements Client
         $this->client = $client;
     }
 
-    public function request($method, $path, $data = null, $raw = false)
+    public function request($method, $path, $data = null, $raw = false, $contentType = 'application/json')
     {
         $start = microtime(true);
         
-        $response = $this->client->request($method, $path, $data, $raw);
+        $response = $this->client->request($method, $path, $data, $raw, $contentType);
         
         $duration = microtime(true) - $start;
         $this->requests[] = array(
