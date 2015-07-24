@@ -91,14 +91,15 @@ class SocketClient extends AbstractHTTPClient
     /**
      * Build a HTTP 1.1 request
      *
-     * Build the HTTP 1.1 request headers from the gicven input.
+     * Build the HTTP 1.1 request headers from the given input.
      *
      * @param string $method
      * @param string $path
      * @param string $data
+     * @param array $headers
      * @return string
      */
-    protected function buildRequest( $method, $path, $data, $contentType = 'application/json' )
+    protected function buildRequest( $method, $path, $data, $headers)
     {
         // Create basic request headers
         $request = "$method $path HTTP/1.1\r\nHost: {$this->options['host']}\r\n";
@@ -112,10 +113,19 @@ class SocketClient extends AbstractHTTPClient
         }
 
         // Set keep-alive header, which helps to keep to connection
-        // initilization costs low, especially when the database server is not
+        // initialization costs low, especially when the database server is not
         // available in the locale net.
         $request .= "Connection: " . ( $this->options['keep-alive'] ? 'Keep-Alive' : 'Close' ) . "\r\n";
-        $request .= 'Content-type: ' . $contentType . "\r\n";
+
+        if (!isset($headers['Content-Type'])) {
+            $headers['Content-Type'] = 'application/json';
+        }
+        foreach ($headers as $key => $value) {
+            if (is_bool($value) === true) {
+                $value = ($value) ? 'true': 'false';
+            }
+            $request .= $key . ": ". $value . "\r\n";
+        }
 
         // Also add headers and request body if data should be sent to the
         // server. Otherwise just add the closing mark for the header section
@@ -123,7 +133,7 @@ class SocketClient extends AbstractHTTPClient
         if ( $data !== null )
         {
             $request .= "Content-Length: " . strlen( $data ) . "\r\n\r\n";
-            $request .= "$data";
+            $request .= $data;
         }
         else
         {
@@ -139,21 +149,22 @@ class SocketClient extends AbstractHTTPClient
      * Perform a request to the server and return the result converted into a
      * Response object. If you do not expect a JSON structure, which
      * could be converted in such a response object, set the forth parameter to
-     * true, and you get a response object retuerned, containing the raw body.
+     * true, and you get a response object returned, containing the raw body.
      *
      * @param string $method
      * @param string $path
      * @param string $data
      * @param bool $raw
+     * @param array $headers
      * @return Response
      */
-    public function request( $method, $path, $data = null, $raw = false, $contentType = 'application/json' )
+    public function request( $method, $path, $data = null, $raw = false, array $headers = array() )
     {
         // Try establishing the connection to the server
         $this->checkConnection();
 
         // Send the build request to the server
-        if ( fwrite( $this->connection, $request = $this->buildRequest( $method, $path, $data, $contentType ) ) === false )
+        if ( fwrite( $this->connection, $request = $this->buildRequest( $method, $path, $data, $headers ) ) === false )
         {
             // Reestablish which seems to have been aborted
             //
@@ -161,16 +172,16 @@ class SocketClient extends AbstractHTTPClient
             // connection establishing mechanism does not correctly throw an
             // exception on failure.
             $this->connection = null;
-            return $this->request( $method, $path, $data, $raw, $contentType );
+            return $this->request( $method, $path, $data, $raw, $headers );
         }
 
         // Read server response headers
         $rawHeaders = '';
-        $headers = array(
+        $responseHeaders = array(
             'connection' => ( $this->options['keep-alive'] ? 'Keep-Alive' : 'Close' ),
         );
 
-        // Remove leading newlines, should not accur at all, actually.
+        // Remove leading newlines, should not occur at all, actually.
         while ( ( ( $line = fgets( $this->connection ) ) !== false ) &&
                 ( ( $lineContent = rtrim( $line ) ) === '' ) );
 
@@ -187,7 +198,7 @@ class SocketClient extends AbstractHTTPClient
             // An aborted connection seems to happen here on long running
             // requests, which cause a connection timeout at server side.
             $this->connection = null;
-            return $this->request( $method, $path, $data, $raw, $contentType );
+            return $this->request( $method, $path, $data, $raw, $headers );
         }
 
         do {
@@ -197,25 +208,25 @@ class SocketClient extends AbstractHTTPClient
             // Extract header values
             if ( preg_match( '(^HTTP/(?P<version>\d+\.\d+)\s+(?P<status>\d+))S', $lineContent, $match ) )
             {
-                $headers['version'] = $match['version'];
-                $headers['status']  = (int) $match['status'];
+                $responseHeaders['version'] = $match['version'];
+                $responseHeaders['status']  = (int) $match['status'];
             }
             else
             {
                 list( $key, $value ) = explode( ':', $lineContent, 2 );
-                $headers[strtolower( $key )] = ltrim( $value );
+                $responseHeaders[strtolower( $key )] = ltrim( $value );
             }
         }  while ( ( ( $line = fgets( $this->connection ) ) !== false ) &&
                    ( ( $lineContent = rtrim( $line ) ) !== '' ) );
 
         // Read response body
         $body = '';
-        if ( !isset( $headers['transfer-encoding'] ) ||
-             ( $headers['transfer-encoding'] !== 'chunked' ) )
+        if ( !isset( $responseHeaders['transfer-encoding'] ) ||
+             ( $responseHeaders['transfer-encoding'] !== 'chunked' ) )
         {
             // HTTP 1.1 supports chunked transfer encoding, if the according
             // header is not set, just read the specified amount of bytes.
-            $bytesToRead = (int) ( isset( $headers['content-length'] ) ? $headers['content-length'] : 0 );
+            $bytesToRead = (int) ( isset( $responseHeaders['content-length'] ) ? $responseHeaders['content-length'] : 0 );
 
             // Read body only as specified by chunk sizes, everything else
             // are just footnotes, which are not relevant for us.
@@ -255,29 +266,29 @@ class SocketClient extends AbstractHTTPClient
         }
 
         // Reset the connection if the server asks for it.
-        if ( $headers['connection'] !== 'Keep-Alive' )
+        if ( $responseHeaders['connection'] !== 'Keep-Alive' )
         {
             fclose( $this->connection );
             $this->connection = null;
         }
 
         // Handle some response state as special cases
-        switch ( $headers['status'] )
+        switch ( $responseHeaders['status'] )
         {
             case 301:
             case 302:
             case 303:
             case 307:
-                $path = parse_url( $headers['location'], PHP_URL_PATH );
-                return $this->request( $method, $path, $data, $raw );
+                $path = parse_url( $responseHeaders['location'], PHP_URL_PATH );
+                return $this->request( $method, $path, $data, $raw, $headers );
         }
 
-        // Create repsonse object from couch db response
-        if ( $headers['status'] >= 400 )
+        // Create response object from couch db response
+        if ( $responseHeaders['status'] >= 400 )
         {
-            return new ErrorResponse( $headers['status'], $headers, $body );
+            return new ErrorResponse( $responseHeaders['status'], $responseHeaders, $body );
         }
-        return new Response( $headers['status'], $headers, $body, $raw );
+        return new Response( $responseHeaders['status'], $responseHeaders, $body, $raw );
     }
 }
 
