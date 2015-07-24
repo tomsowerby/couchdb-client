@@ -60,7 +60,7 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
         $dbs = $this->couchClient->getAllDatabases();
         $this->assertContains($dbName2, $dbs);
 
-        // tidy
+        // Tidy
         $this->couchClient->deleteDatabase($dbName2);
     }
 
@@ -307,7 +307,7 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
         $ids = array();
         $expectedRows = array();
         foreach (range(1, 3) as $i) {
-            list($id, $rev) = $client->postDocument(array('foo' => 'bar' . $i));
+            list($id, $rev) = $client->putDocument(array('foo' => 'bar' . $i), (string)$i);
             $ids[] = $id;
             // This structure might be dependent from couchdb version. Tested against v1.6.1
             $expectedRows[] = array(
@@ -324,23 +324,55 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
             );
         }
 
+        // Everything
         $response = $client->allDocs();
         $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => $expectedRows), $response->body);
 
+        // No Limit
         $response = $client->allDocs(0);
         $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => $expectedRows), $response->body);
 
+        // Limit
         $response = $client->allDocs(1);
         $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => array($expectedRows[0])), $response->body);
 
+        // Limit
         $response = $client->allDocs(2);
         $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => array($expectedRows[0], $expectedRows[1])), $response->body);
 
+        // Start Key
         $response = $client->allDocs(0, $ids[1]);
         $this->assertEquals(array('total_rows' => 3, 'offset' => 1, 'rows' => array($expectedRows[1], $expectedRows[2])), $response->body);
 
+        // Start Key with Limit
         $response = $client->allDocs(1, $ids[2]);
         $this->assertEquals(array('total_rows' => 3, 'offset' => 2, 'rows' => array($expectedRows[2])), $response->body);
+
+
+
+        // End key
+        $response = $client->allDocs(0, null, $ids[0]);
+        $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => array($expectedRows[0])), $response->body);
+
+        // Skip
+        $response = $client->allDocs(0, null, null, 1);
+        $this->assertEquals(array('total_rows' => 3, 'offset' => 1, 'rows' => array($expectedRows[1], $expectedRows[2])), $response->body);
+
+
+
+        // Skip, Descending
+        $response = $client->allDocs(null, null, null, 1, true);
+        $this->assertEquals(array('total_rows' => 3, 'offset' => 1, 'rows' => array($expectedRows[1], $expectedRows[0])), $response->body);
+
+        // Limit, Descending
+        $response = $client->allDocs(1, null, null, null, true);
+        $this->assertEquals(array('total_rows' => 3, 'offset' => 0, 'rows' => array($expectedRows[2])), $response->body);
+
+
+        // tidy
+        $client->deleteDocument($expectedRows[0]['id'], $expectedRows[0]['value']['rev']);
+        $client->deleteDocument($expectedRows[1]['id'], $expectedRows[1]['value']['rev']);
+        $client->deleteDocument($expectedRows[2]['id'], $expectedRows[2]['value']['rev']);
     }
 
     public function testGetActiveTasks()
@@ -355,7 +387,6 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
         $this->couchClient->createDatabase($targetDatabase1);
         $this->couchClient->createDatabase($targetDatabase2);
 
-
         $client->replicate($sourceDatabase, $targetDatabase1, null, true);
         $active_tasks = $client->getActiveTasks();
         $this->assertTrue(count($active_tasks) == 1);
@@ -369,7 +400,7 @@ class CouchDBClientTest extends \Doctrine\Tests\CouchDB\CouchDBFunctionalTestCas
         $active_tasks = $client->getActiveTasks();
         $this->assertEquals(array(), $active_tasks);
 
-        // tidy
+        // Tidy
         $this->couchClient->deleteDatabase($targetDatabase1);
         $this->couchClient->deleteDatabase($targetDatabase2);
     }
